@@ -5,7 +5,7 @@ __pycache__/
 *.pyd
 .Python
 env/
-venv/  # Ignore the virtual environment folder
+venv/
 .ipynb_checkpoints/
 .pytest_cache/
 utilities\__pycache__
