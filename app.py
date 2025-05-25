@@ -4,7 +4,7 @@ from utilities.area_calculation import calculate_polygon_area_in_sqm
 from shapely.geometry import Point, Polygon, mapping
 from geopy.distance import geodesic
 import googlemaps
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 
 
@@ -182,6 +182,10 @@ def calculate_solar_potential(latitude, longitude,shape):
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
         return None
+@app.route('/')
+def index():
+    return render_template('frontend.html')
+
 
 @app.route('/data', methods=['POST'])
 def endpoint():
