@@ -158,8 +158,15 @@
             clearRoofShapes();
 
             // Construct the backend URL
-            const backendUrl = `http://127.0.0.1:5000/data`;
-
+              // Check the current hostname
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            // Development URL
+            backendUrl = 'http://127.0.0.1:5000/data';
+        } else {
+            // Production URL (e.g., when deployed to 'yourdomain.com')
+            // Adjust this to your actual deployed backend URL
+            backendUrl = 'https://projectsunday.onrender.com/data';
+        }
             console.log(`Attempting to fetch from backend: ${backendUrl}`);    
             try {
                  const response = await fetch(backendUrl, {
