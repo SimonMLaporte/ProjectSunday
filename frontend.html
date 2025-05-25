@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IEN Solar Calculator</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { max-width: 800px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1, h2 { color: rgb(0, 143, 5); }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"] { width: calc(100% - 22px); /* Adjust width for padding */ padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { padding: 10px 20px; background-color: rgb(0, 143, 5); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-top: 10px; }
+        button:hover { background-color: rgba(0, 143, 5, 0.475); }
+        #results { margin-top: 20px; padding: 15px; border: 1px solid #e0e0e0; border-radius: 4px; background-color: #f9f9f9; white-space: pre-wrap; font-family: monospace; overflow-x: auto;}
+        .error { color: red; font-weight: bold; }
+        .coordinates-display { margin-top: 10px; font-style: italic; color: #555; }
+        #map { height: 400px; width: 100%; border: 1px solid #ddd; border-radius: 4px; margin-top: 20px; } /* Styling for the map */
+        .image-overlay {
+            position: relative;
+            top: 20px; 
+            left: 700px; 
+            z-index: 1000; 
+            padding: 10px;
+        }
+        .image-overlay img {
+            max-width: 80px;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>IEN's solar power calculator</h1>
+        <p>Search for an address to fetch solar insights.</p>
+
+        <div>
+            <label for="autocomplete">Search Address:</label>
+            <input type="text" id="autocomplete" placeholder="Start typing an address...">
+            <input type="hidden" id="latitude">
+            <input type="hidden" id="longitude">
+        </div>
+        <div class="image-overlay">
+            <img src="assets/IENman.png" alt="IEN Man" class="middle">
+        </div>
+        <button onclick="fetchSolarData()">Get Solar Data</button>
+
+        <div id="map"></div> 
+
+        <h2>Results:</h2>
+        <pre id="results">Search for an address and click "Get Solar Data" to see results...</pre>
+    </div>
+
+    <script>
+        let gAutocomplete; // Declare globally to make it accessible
+        let map; // Declare map globally
+        let marker; // Declare marker globally
+        let roofShapes = []; // Array to store multiple roof segment rectangles/polygons
+
+        function initAutocomplete() {
+            console.log("initAutocomplete() called. Setting up Autocomplete and Map...");
+            const input = document.getElementById('autocomplete');
+            if (!input) {
+                console.error("Error: Autocomplete input element not found!");
+                return;
+            }
+            
+            // Initialize Google Map
+            const initialLocation = { lat: 3.1390, lng: 101.6869 }; // Default to Kuala Lumpur, Malaysia
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: initialLocation,
+                zoom: 10,
+                mapTypeId: 'hybrid' // Hybrid map type shows satellite imagery
+            });
+
+            // Initialize marker
+            marker = new google.maps.Marker({
+                map: map,
+                position: initialLocation,
+                title: 'Selected Location'
+            });
+
+
+            gAutocomplete = new google.maps.places.Autocomplete(input, {
+                // You can add options here, e.g., types: ['address']
+            });
+
+            gAutocomplete.addListener('place_changed', () => {
+                console.log("Place selected in Autocomplete listener.");
+                const place = gAutocomplete.getPlace();
+                const resultsDiv = document.getElementById('results');
+
+                // Clear previous results when a new place is selected
+                resultsDiv.textContent = 'Ready to fetch data for the selected address. Click "Get Solar Data".';
+                resultsDiv.classList.remove('error');
+
+                // Clear existing roof shapes if any
+                clearRoofShapes();
+
+                if (place.geometry && place.geometry.location) {
+                    const lat = place.geometry.location.lat();
+                    const lng = place.geometry.location.lng();
+                    
+                    document.getElementById('latitude').value = lat;
+                    document.getElementById('longitude').value = lng;
+
+                    // Update map center and marker position
+                    map.setCenter(place.geometry.location);
+                    marker.setPosition(place.geometry.location);
+                    map.setZoom(19); // Zoom in closer to the selected address, even closer for roof details
+                    marker.setMap(map); // Ensure marker is visible
+                } else {
+                    console.warn("Place selected has no geometry or location.");
+                    // Optionally hide marker if no location is found
+                    marker.setMap(null);
+                }
+            });
+            map.addListener('click', (e) => {
+                const clickedLatLng = e.latLng;
+                marker.setPosition(clickedLatLng); // Move the marker to the clicked spot
+                document.getElementById('latitude').value = clickedLatLng.lat();
+                document.getElementById('longitude').value = clickedLatLng.lng();
+
+                // Clear previous results and indicate new selection
+                document.getElementById('results').textContent = 'Location selected by pin drop. Attempting to get address via reverse geocoding...';
+                document.getElementById('results').classList.remove('error');
+                clearRoofShapes(); // Clear existing roof shapes
+                document.getElementById('results').textContent = `Manual Selection: Lat: ${clickedLatLng.lat()}, Lng: ${clickedLatLng.lng()}. Click "Get Solar Data".`;
+            });
+            console.log("Autocomplete and Map setup complete.");
+        }
+
+        // Function to clear all drawn roof segment polygons/rectangles
+        function clearRoofShapes() {
+            for (let i = 0; i < roofShapes.length; i++) {
+                roofShapes[i].setMap(null);
+            }
+            roofShapes = []; // Reset the array
+        }
+
+        async function fetchSolarData() {
+            const resultsDiv = document.getElementById('results');
+
+            resultsDiv.textContent = 'Fetching data...';
+            resultsDiv.classList.remove('error'); // Clear any previous error styling
+
+            const addressToFetch = document.getElementById('autocomplete').value;
+            console.log(`Address from input field: "${addressToFetch}"`); // Debugging: check this value
+            
+            // Validate if an address has been entered or selected
+            if (!addressToFetch) {
+                resultsDiv.textContent = 'Please enter or select an address using the autocomplete.';
+                resultsDiv.classList.add('error');
+                return;
+            }
+
+            // Clear existing roof shapes if any before new fetch
+            clearRoofShapes();
+
+            // Construct the backend URL
+            const backendUrl = `http://127.0.0.1:5000/data`;
+
+            console.log(`Attempting to fetch from backend: ${backendUrl}`);    
+            try {
+                 const response = await fetch(backendUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json' // IMPORTANT: Tell Flask we're sending JSON
+                    },
+                    body: JSON.stringify({ longitude: document.getElementById('longitude').value,
+                    latitude: document.getElementById('latitude').value }) // Send the string in a JSON object
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    resultsDiv.textContent = 
+                    "Building: " + data.tags.name + "\n" +
+                    "Building Type: " + data.tags.building + "\n" +
+                    "Estimated Roof Area [m2]:  " + Math.round(data.area) + "\n" +
+                    "Total Annual Solar Potential [MWh/year]: " + Math.round(data.solarPotential) + "\n" +
+                    "Annual Money Saved by Installing PV [RM/year]:"
+
+                
+                
+                    // --- Drawing roof segments from roofSegmentStats using bounding boxes ---
+                clearRoofShapes(); // Clear existing shapes before drawing new ones
+                const polygonCoords = data.shape.coordinates[0].map(coord => ({
+                    lat: coord[1], // Shapely gives (lon, lat)
+                    lng: coord[0]
+                }));
+
+                const buildingPolygon = new google.maps.Polygon({
+                    paths: [polygonCoords],
+                    strokeColor: '#FF0000',
+                    strokeOpacity: 0.8,
+                    strokeWeight: 2,
+                    fillColor: '#FF0000',
+                    fillOpacity: 0.35,
+                });
+                buildingPolygon.setMap(map);
+                roofShapes.push(buildingPolygon);
+
+                } else {
+                    resultsDiv.textContent = `Error: ${data.error || 'Unknown error'}`;
+                    resultsDiv.classList.add('error');
+                    console.error('Backend error:', data);
+                }
+            } catch (error) {
+                resultsDiv.textContent = `Network error: ${error.message}. Make sure your Python Flask server is running and accessible.`;
+                resultsDiv.classList.add('error');
+                console.error('Fetch error:', error);
+            }
+        }
+    </script>
+    
+    <script async defer 
+            src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDVfNQYPldbrUhrzDJ8rqFkQCaqLdmIPFM&libraries=places&callback=initAutocomplete">
+    </script>
+</body>
+</html>

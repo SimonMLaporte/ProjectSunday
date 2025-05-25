@@ -1,0 +1,25 @@
+# Python specific ignores
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/  # Ignore the virtual environment folder
+.ipynb_checkpoints/
+.pytest_cache/
+utilities\__pycache__
+
+# Editor/IDE specific ignores
+.vscode/ # VS Code settings
+.idea/   # PyCharm/IntelliJ IDEA settings
+
+# Flask specific ignores (if you have them)
+instance/
+
+# OS generated files
+.DS_Store # macOS
+Thumbs.db # Windows
+
+# Environment variables (if you start using .env files)
+.env
